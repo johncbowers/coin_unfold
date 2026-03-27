@@ -68,6 +68,23 @@ export function Sidebar({
   keepTree,
   cutTree,
 }: SidebarProps) {
+  const keepDegrees = polyhedron.faces.map(() => 0)
+
+  keepTree.parentByFace.forEach((parentFaceIndex, faceIndex) => {
+    if (parentFaceIndex === null) {
+      return
+    }
+
+    keepDegrees[parentFaceIndex] += 1
+    keepDegrees[faceIndex] += 1
+  })
+
+  const keepLeafCount = keepDegrees.filter((degree) => degree === 1).length
+  const keepMaxDegree = Math.max(...keepDegrees)
+  const keepIsPath = keepTree.dualEdgeIndices.length > 0
+    && keepLeafCount === 2
+    && keepDegrees.every((degree) => degree <= 2)
+
   return (
     <aside className="sidebar">
       <section className="panel-section">
@@ -105,11 +122,17 @@ export function Sidebar({
           <select value={method} onChange={(event) => onMethodChange(event.target.value as TreeMethod)}>
             <option value="bfs">Breadth-first search</option>
             <option value="dfs">Depth-first search</option>
+            <option value="orange-peel">Orange Peel</option>
           </select>
         </label>
         <p className="caption">
           The `KeepTree` is built on the dual graph. The complementary primal edges form the `CutTree`.
         </p>
+        {method === 'orange-peel' && (
+          <p className="caption">
+            Orange Peel follows a guided walk on the dual graph, preferring same-depth neighbors from the current face. The tree overlay shows tree edges, not walk order.
+          </p>
+        )}
       </section>
 
       <section className="panel-section">
@@ -169,6 +192,14 @@ export function Sidebar({
           <div>
             <dt>Cut edges</dt>
             <dd>{cutTree.primalEdgeIndices.length}</dd>
+          </div>
+          <div>
+            <dt>Keep shape</dt>
+            <dd>{keepIsPath ? 'path' : 'tree'}</dd>
+          </div>
+          <div>
+            <dt>Max keep degree</dt>
+            <dd>{keepMaxDegree}</dd>
           </div>
         </dl>
         <p className="caption">

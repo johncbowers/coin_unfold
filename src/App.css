@@ -286,8 +286,8 @@ button:hover {
 .net-svg {
   display: block;
   width: 100%;
-  height: min(34vh, 22rem);
-  min-height: 14rem;
+  height: min(48vw, 30rem);
+  min-height: 20rem;
   border: 1px solid var(--border);
   border-radius: 0.3rem;
   background: var(--panel);
@@ -411,6 +411,7 @@ button:hover {
   }
 
   .net-svg {
-    height: min(32vh, 18rem);
+    height: min(70vw, 24rem);
+    min-height: 18rem;
   }
 }

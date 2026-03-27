@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Matrix4, Vector3 } from 'three'
 import { edgeKey, transformPoint } from '../../domain/geometry/polyhedronMath'
 import type { CoinData, CutTree, DerivedPolyhedron, KeepTree, RenderMode } from '../../types/polyhedron'
@@ -6,6 +6,18 @@ import type { CoinData, CutTree, DerivedPolyhedron, KeepTree, RenderMode } from 
 interface Point2D {
   x: number
   y: number
+}
+
+interface ViewBoxState {
+  minX: number
+  minY: number
+  width: number
+  height: number
+}
+
+interface ViewBoxOverrideState {
+  signature: string
+  viewBox: ViewBoxState
 }
 
 interface NetView2DProps {
@@ -55,6 +67,10 @@ function pointsToSvg(points: Point2D[]) {
   return points.map((point) => `${point.x},${point.y}`).join(' ')
 }
 
+function formatViewBox(viewBox: ViewBoxState) {
+  return `${viewBox.minX} ${viewBox.minY} ${viewBox.width} ${viewBox.height}`
+}
+
 export function NetView2D({
   polyhedron,
   keepTree,
@@ -69,7 +85,14 @@ export function NetView2D({
   showCutTree,
 }: NetView2DProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const dragStateRef = useRef<{
+    pointerId: number
+    clientX: number
+    clientY: number
+    viewBox: ViewBoxState
+  } | null>(null)
   const rootFace = polyhedron.faces[keepTree.rootFaceIndex]
+  const [viewBoxOverride, setViewBoxOverride] = useState<ViewBoxOverrideState | null>(null)
 
   const projected = useMemo(() => {
     const edgeIndexByKey = new Map(
@@ -169,15 +192,37 @@ export function NetView2D({
     const height = Math.max(1, bounds.maxY - bounds.minY)
     const paddingX = width * 0.05
     const paddingY = height * 0.08
+    const initialViewBox = {
+      minX: bounds.minX - paddingX,
+      minY: bounds.minY - paddingY,
+      width: width + paddingX * 2,
+      height: height + paddingY * 2,
+    }
 
     return {
       facePolygons,
       keepSegments,
       cutSegments,
       coinPolygons,
-      viewBox: `${bounds.minX - paddingX} ${bounds.minY - paddingY} ${width + paddingX * 2} ${height + paddingY * 2}`,
+      initialViewBox,
     }
-  }, [coins, cutTree.primalEdgeIndices, facePoses, keepTree.dualEdgeIndices, polyhedron, rootFace.basisU, rootFace.basisV, rootFace.centroid])
+  }, [
+    coins,
+    cutTree.primalEdgeIndices,
+    facePoses,
+    keepTree.dualEdgeIndices,
+    polyhedron,
+    rootFace.basisU,
+    rootFace.basisV,
+    rootFace.centroid,
+  ])
+  const viewBoxSignature = useMemo(
+    () => formatViewBox(projected.initialViewBox),
+    [projected.initialViewBox],
+  )
+  const activeViewBox = viewBoxOverride?.signature === viewBoxSignature
+    ? viewBoxOverride.viewBox
+    : projected.initialViewBox
 
   const showFaceMeshes = renderMode !== 'coins-only'
   const showCoinMeshes = renderMode !== 'faces'
@@ -212,6 +257,13 @@ export function NetView2D({
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
     clone.setAttribute('version', '1.1')
 
+    const viewBox = clone.viewBox.baseVal
+    const exportWidth = 2400
+    const exportHeight = Math.max(1200, Math.round((viewBox.height / viewBox.width) * exportWidth))
+
+    clone.setAttribute('width', String(exportWidth))
+    clone.setAttribute('height', String(exportHeight))
+
     const serializer = new XMLSerializer()
     const markup = serializer.serializeToString(clone)
     const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' })
@@ -221,6 +273,97 @@ export function NetView2D({
     link.download = exportFileName
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  const projectClientPoint = (clientX: number, clientY: number) => {
+    const svgElement = svgRef.current
+
+    if (!svgElement) {
+      return null
+    }
+
+    const bounds = svgElement.getBoundingClientRect()
+    const x = ((clientX - bounds.left) / bounds.width) * activeViewBox.width + activeViewBox.minX
+    const y = ((clientY - bounds.top) / bounds.height) * activeViewBox.height + activeViewBox.minY
+
+    return { x, y }
+  }
+
+  const handlePointerDown: React.PointerEventHandler<SVGSVGElement> = (event) => {
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      viewBox: activeViewBox,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handlePointerMove: React.PointerEventHandler<SVGSVGElement> = (event) => {
+    const dragState = dragStateRef.current
+
+    if (dragState?.pointerId !== event.pointerId) {
+      return
+    }
+
+    const svgElement = svgRef.current
+
+    if (!svgElement) {
+      return
+    }
+
+    const bounds = svgElement.getBoundingClientRect()
+    const deltaClientX = event.clientX - dragState.clientX
+    const deltaClientY = event.clientY - dragState.clientY
+    const worldDeltaX = (deltaClientX / bounds.width) * dragState.viewBox.width
+    const worldDeltaY = (deltaClientY / bounds.height) * dragState.viewBox.height
+
+    setViewBoxOverride({
+      signature: viewBoxSignature,
+      viewBox: {
+        ...dragState.viewBox,
+        minX: dragState.viewBox.minX - worldDeltaX,
+        minY: dragState.viewBox.minY - worldDeltaY,
+      },
+    })
+  }
+
+  const clearDrag = (event?: React.PointerEvent<SVGSVGElement>) => {
+    if (event && dragStateRef.current?.pointerId === event.pointerId) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    dragStateRef.current = null
+  }
+
+  const handleWheel: React.WheelEventHandler<SVGSVGElement> = (event) => {
+    event.preventDefault()
+
+    const focalPoint = projectClientPoint(event.clientX, event.clientY)
+
+    if (!focalPoint) {
+      return
+    }
+
+    const zoomFactor = event.deltaY > 0 ? 1.12 : 0.88
+    const nextWidth = Math.max(projected.initialViewBox.width * 0.18, activeViewBox.width * zoomFactor)
+    const nextHeight = Math.max(projected.initialViewBox.height * 0.18, activeViewBox.height * zoomFactor)
+    const maxWidth = projected.initialViewBox.width * 4
+    const maxHeight = projected.initialViewBox.height * 4
+    const clampedWidth = Math.min(maxWidth, nextWidth)
+    const clampedHeight = Math.min(maxHeight, nextHeight)
+    const ratioX = (focalPoint.x - activeViewBox.minX) / activeViewBox.width
+    const ratioY = (focalPoint.y - activeViewBox.minY) / activeViewBox.height
+
+    setViewBoxOverride({
+      signature: viewBoxSignature,
+      viewBox: {
+        minX: focalPoint.x - clampedWidth * ratioX,
+        minY: focalPoint.y - clampedHeight * ratioY,
+        width: clampedWidth,
+        height: clampedHeight,
+      },
+    })
   }
 
   return (
@@ -237,9 +380,14 @@ export function NetView2D({
       <svg
         ref={svgRef}
         className="net-svg"
-        viewBox={projected.viewBox}
+        viewBox={formatViewBox(activeViewBox)}
         preserveAspectRatio="xMidYMid meet"
-          shapeRendering="geometricPrecision"
+        shapeRendering="geometricPrecision"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={clearDrag}
+        onPointerLeave={clearDrag}
+        onWheel={handleWheel}
       >
         <rect x="-10000" y="-10000" width="20000" height="20000" fill={palette.background} />
 
@@ -311,6 +459,7 @@ export function NetView2D({
               vectorEffect="non-scaling-stroke"
             />
           ))}
+
       </svg>
     </div>
   )

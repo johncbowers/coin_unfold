@@ -1,6 +1,6 @@
 import type { Matrix4, Vector3 } from 'three'
 
-export type TreeMethod = 'bfs' | 'dfs'
+export type TreeMethod = 'bfs' | 'dfs' | 'orange-peel'
 export type RenderMode = 'faces' | 'faces+coins' | 'coins-only'
 
 export interface RawPolyhedron {
@@ -54,9 +54,11 @@ export interface DerivedPolyhedron {
 export interface KeepTree {
   rootFaceIndex: number
   parentByFace: Array<number | null>
+  depthByFace: Array<number | null>
   dualEdgeIndices: number[]
   traversalOrder: number[]
   method: TreeMethod
+  usedFallback?: boolean
 }
 
 export interface CutTree {
