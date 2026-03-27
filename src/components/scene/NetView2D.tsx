@@ -192,6 +192,8 @@ export function NetView2D({
     const height = Math.max(1, bounds.maxY - bounds.minY)
     const paddingX = width * 0.05
     const paddingY = height * 0.08
+    const exportPaddingX = width * 0.02
+    const exportPaddingY = height * 0.02
     const initialViewBox = {
       minX: bounds.minX - paddingX,
       minY: bounds.minY - paddingY,
@@ -204,6 +206,12 @@ export function NetView2D({
       keepSegments,
       cutSegments,
       coinPolygons,
+      exportViewBox: {
+        minX: bounds.minX - exportPaddingX,
+        minY: bounds.minY - exportPaddingY,
+        width: width + exportPaddingX * 2,
+        height: height + exportPaddingY * 2,
+      },
       initialViewBox,
     }
   }, [
@@ -257,12 +265,37 @@ export function NetView2D({
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
     clone.setAttribute('version', '1.1')
 
-    const viewBox = clone.viewBox.baseVal
+    const exportViewBox = projected.exportViewBox
     const exportWidth = 2400
-    const exportHeight = Math.max(1200, Math.round((viewBox.height / viewBox.width) * exportWidth))
+    const exportHeight = Math.max(
+      1200,
+      Math.round((exportViewBox.height / exportViewBox.width) * exportWidth),
+    )
+    const exportScale = Math.min(
+      exportWidth / exportViewBox.width,
+      exportHeight / exportViewBox.height,
+    )
 
+    clone.setAttribute('viewBox', formatViewBox(exportViewBox))
     clone.setAttribute('width', String(exportWidth))
     clone.setAttribute('height', String(exportHeight))
+
+    for (const element of clone.querySelectorAll('[stroke-width]')) {
+      const strokeWidth = element.getAttribute('stroke-width')
+
+      if (!strokeWidth) {
+        continue
+      }
+
+      const numericWidth = Number.parseFloat(strokeWidth)
+
+      if (!Number.isFinite(numericWidth)) {
+        continue
+      }
+
+      element.setAttribute('stroke-width', `${numericWidth / exportScale}`)
+      element.removeAttribute('vector-effect')
+    }
 
     const serializer = new XMLSerializer()
     const markup = serializer.serializeToString(clone)
@@ -372,6 +405,9 @@ export function NetView2D({
         <h2>2D net view</h2>
         <div className="net-panel-actions">
           <span>Projected to the root-face plane and auto-fitted</span>
+          <button type="button" className="net-export-button" onClick={() => setViewBoxOverride(null)}>
+            Reset view
+          </button>
           <button type="button" className="net-export-button" onClick={downloadSvg}>
             Download SVG
           </button>
