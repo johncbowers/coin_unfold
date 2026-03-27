@@ -11,6 +11,18 @@ import type { RenderMode, TreeMethod } from './types/polyhedron'
 
 type ThemeMode = 'light' | 'dark'
 
+interface UrlSelectionState {
+  polyhedronId: string
+  method: TreeMethod
+  rootFaceIndex: number
+}
+
+const DEFAULT_URL_SELECTION: UrlSelectionState = {
+  polyhedronId: polyhedronRegistry[0].id,
+  method: 'bfs',
+  rootFaceIndex: 0,
+}
+
 function getInitialTheme(): ThemeMode {
   if (typeof window === 'undefined') {
     return 'light'
@@ -27,10 +39,36 @@ function downloadUrl(url: string, fileName: string) {
   link.click()
 }
 
+function getInitialUrlSelection(): UrlSelectionState {
+  if (typeof window === 'undefined') {
+    return DEFAULT_URL_SELECTION
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  const requestedPolyhedronId = params.get('poly')
+  const requestedMethod = params.get('tree')
+  const requestedFace = Number.parseInt(params.get('face') ?? '0', 10)
+  const validPolyhedronId = polyhedronRegistry.some((entry) => entry.id === requestedPolyhedronId)
+    ? requestedPolyhedronId!
+    : DEFAULT_URL_SELECTION.polyhedronId
+  const validMethod: TreeMethod = requestedMethod === 'bfs'
+    || requestedMethod === 'dfs'
+    || requestedMethod === 'orange-peel'
+    ? requestedMethod
+    : DEFAULT_URL_SELECTION.method
+
+  return {
+    polyhedronId: validPolyhedronId,
+    method: validMethod,
+    rootFaceIndex: Number.isFinite(requestedFace) && requestedFace >= 0 ? requestedFace : 0,
+  }
+}
+
 function App() {
-  const [polyhedronId, setPolyhedronId] = useState(polyhedronRegistry[0].id)
-  const [method, setMethod] = useState<TreeMethod>('bfs')
-  const [rootFaceIndex, setRootFaceIndex] = useState(0)
+  const initialUrlSelection = getInitialUrlSelection()
+  const [polyhedronId, setPolyhedronId] = useState(initialUrlSelection.polyhedronId)
+  const [method, setMethod] = useState<TreeMethod>(initialUrlSelection.method)
+  const [rootFaceIndex, setRootFaceIndex] = useState(initialUrlSelection.rootFaceIndex)
   const [renderMode, setRenderMode] = useState<RenderMode>('faces+coins')
   const [showEdges, setShowEdges] = useState(true)
   const [showKeepTree, setShowKeepTree] = useState(true)
@@ -98,6 +136,14 @@ function App() {
     document.documentElement.dataset.theme = themeMode
     window.localStorage.setItem('coin-unfold-theme', themeMode)
   }, [themeMode])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('poly', polyhedronId)
+    url.searchParams.set('face', String(activeRootFaceIndex))
+    url.searchParams.set('tree', method)
+    window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}${url.hash}`)
+  }, [activeRootFaceIndex, method, polyhedronId])
 
   useEffect(() => {
     const animate = (timestamp: number) => {
