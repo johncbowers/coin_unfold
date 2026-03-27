@@ -1,6 +1,6 @@
 import { ArcballControls, Line } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { DoubleSide, Matrix4, Quaternion, Vector3 } from 'three'
 import { edgeKey, transformPoint } from '../../domain/geometry/polyhedronMath'
 import type {
@@ -164,7 +164,6 @@ function SceneContent({
   cutTree,
   facePoses,
   coins,
-  cameraTarget,
   themeMode,
   renderMode,
   showEdges,
@@ -328,35 +327,42 @@ function SceneContent({
         ))}
 
       <gridHelper args={[10, 10, gridMajor, gridMinor]} position={[0, -2.8, 0]} />
-      <ArcballControls
-        makeDefault
-        enablePan
-        enableZoom
-        dampingFactor={0.08}
-        target={cameraTarget}
-        minDistance={Math.max(3.5, polyhedron.radius * 1.8)}
-        maxDistance={Math.max(30, polyhedron.radius * 18)}
-      />
     </>
   )
 }
 
 export function PolyhedronScene(props: PolyhedronSceneProps) {
   const direction = new Vector3(1, 0.68, 1.04).normalize()
-  const cameraPosition = props.cameraTarget
-    .clone()
-    .add(direction.multiplyScalar(Math.max(6.5, props.cameraDistance)))
+  const [initialView] = useState(() => ({
+    target: props.cameraTarget.clone(),
+    position: props.cameraTarget
+      .clone()
+      .add(direction.multiplyScalar(Math.max(6.5, props.cameraDistance)))
+      .toArray(),
+  }))
 
   return (
     <Canvas
       dpr={[1, 2]}
       gl={{ antialias: true, preserveDrawingBuffer: true }}
+      onCreated={({ camera }) => {
+        camera.lookAt(initialView.target)
+      }}
       camera={{
         fov: 32,
-        position: cameraPosition.toArray(),
+        position: initialView.position,
       }}
     >
       <SceneContent {...props} />
+      <ArcballControls
+        makeDefault
+        enablePan
+        enableZoom
+        dampingFactor={0.08}
+        target={initialView.target}
+        minDistance={Math.max(3.5, props.polyhedron.radius * 1.8)}
+        maxDistance={Math.max(30, props.polyhedron.radius * 18)}
+      />
     </Canvas>
   )
 }
