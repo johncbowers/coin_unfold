@@ -1,3 +1,5 @@
+import { memo } from 'react'
+
 import type { CutTree, DerivedPolyhedron, KeepTree, RenderMode, TreeMethod } from '../../types/polyhedron'
 
 type ThemeMode = 'light' | 'dark'
@@ -44,7 +46,7 @@ function ToggleRow({
   )
 }
 
-export function Sidebar({
+export const Sidebar = memo(function Sidebar({
   polyhedronOptions,
   polyhedronId,
   onPolyhedronChange,
@@ -222,4 +224,4 @@ export function Sidebar({
       </section>
     </aside>
   )
-}
+})

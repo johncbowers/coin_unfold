@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import type { Matrix4, Vector3 } from 'three'
 import { edgeKey, transformPoint } from '../../domain/geometry/polyhedronMath'
 import type { CoinData, CutTree, DerivedPolyhedron, KeepTree, RenderMode } from '../../types/polyhedron'
@@ -71,7 +71,7 @@ function formatViewBox(viewBox: ViewBoxState) {
   return `${viewBox.minX} ${viewBox.minY} ${viewBox.width} ${viewBox.height}`
 }
 
-export function NetView2D({
+export const NetView2D = memo(function NetView2D({
   polyhedron,
   keepTree,
   cutTree,
@@ -499,4 +499,4 @@ export function NetView2D({
       </svg>
     </div>
   )
-}
+})

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Vector3 } from 'three'
 import './App.css'
 import { Sidebar } from './components/layout/Sidebar'
@@ -6,7 +6,7 @@ import { NetView2D } from './components/scene/NetView2D'
 import { PolyhedronScene } from './components/scene/PolyhedronScene'
 import { buildCoins, getPolyhedronById, polyhedronRegistry } from './domain/polyhedra/registry'
 import { buildCutTree, buildKeepTree } from './domain/trees/spanningTrees'
-import { computeFacePoses } from './domain/unfolding/computeUnfoldedState'
+import { computeFacePoses, prepareFacePoseRig } from './domain/unfolding/computeUnfoldedState'
 import type { RenderMode, TreeMethod } from './types/polyhedron'
 
 type ThemeMode = 'light' | 'dark'
@@ -84,6 +84,10 @@ function App() {
   const canvasShellRef = useRef<HTMLDivElement | null>(null)
 
   const polyhedron = useMemo(() => getPolyhedronById(polyhedronId).create(), [polyhedronId])
+  const polyhedronOptions = useMemo(
+    () => polyhedronRegistry.map(({ id, name }) => ({ id, name })),
+    [],
+  )
   const exportStem = useMemo(
     () => `${polyhedronId}-${method}-${renderMode}`,
     [method, polyhedronId, renderMode],
@@ -97,13 +101,14 @@ function App() {
   )
   const cutTree = useMemo(() => buildCutTree(polyhedron, keepTree), [keepTree, polyhedron])
   const coins = useMemo(() => buildCoins(polyhedron), [polyhedron])
+  const facePoseRig = useMemo(() => prepareFacePoseRig(polyhedron, keepTree), [keepTree, polyhedron])
   const facePoses = useMemo(
-    () => computeFacePoses(polyhedron, keepTree, currentT),
-    [currentT, keepTree, polyhedron],
+    () => computeFacePoses(facePoseRig, currentT),
+    [currentT, facePoseRig],
   )
   const netFacePoses = useMemo(
-    () => computeFacePoses(polyhedron, keepTree, 1),
-    [keepTree, polyhedron],
+    () => computeFacePoses(facePoseRig, 1),
+    [facePoseRig],
   )
   const sceneView = useMemo(() => {
     const allPoints = polyhedron.faces.flatMap((face, faceIndex) =>
@@ -181,6 +186,14 @@ function App() {
     downloadUrl(url, `${exportStem}-3d.png`)
   }
 
+  const handlePolyhedronChange = useCallback((nextId: string) => {
+    setPolyhedronId(nextId)
+    setRootFaceIndex(0)
+    setTargetT(0)
+    setCurrentT(0)
+    setFitViewNonce((value) => value + 1)
+  }, [])
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -212,15 +225,9 @@ function App() {
             Close
           </button>
           <Sidebar
-            polyhedronOptions={polyhedronRegistry.map(({ id, name }) => ({ id, name }))}
+            polyhedronOptions={polyhedronOptions}
             polyhedronId={polyhedronId}
-            onPolyhedronChange={(nextId) => {
-              setPolyhedronId(nextId)
-              setRootFaceIndex(0)
-              setTargetT(0)
-              setCurrentT(0)
-              setFitViewNonce((value) => value + 1)
-            }}
+            onPolyhedronChange={handlePolyhedronChange}
             method={method}
             onMethodChange={setMethod}
             rootFaceIndex={activeRootFaceIndex}

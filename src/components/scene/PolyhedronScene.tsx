@@ -1,6 +1,6 @@
 import { ArcballControls, Line } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { DoubleSide, Matrix4, Quaternion, Vector3 } from 'three'
 import { edgeKey, transformPoint } from '../../domain/geometry/polyhedronMath'
 import type {
@@ -331,7 +331,7 @@ function SceneContent({
   )
 }
 
-export function PolyhedronScene(props: PolyhedronSceneProps) {
+export const PolyhedronScene = memo(function PolyhedronScene(props: PolyhedronSceneProps) {
   const direction = new Vector3(1, 0.68, 1.04).normalize()
   const [initialView] = useState(() => ({
     target: props.cameraTarget.clone(),
@@ -365,4 +365,4 @@ export function PolyhedronScene(props: PolyhedronSceneProps) {
       />
     </Canvas>
   )
-}
+})
