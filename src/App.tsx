@@ -302,6 +302,10 @@ function App() {
           />
         </section>
       </main>
+
+      <footer className="app-footer">
+        <p>© 2026 John C. Bowers · built with GitHub Copilot and GPT-5.4</p>
+      </footer>
     </div>
   )
 }

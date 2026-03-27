@@ -1,3 +1,4 @@
+import conwayHart from 'conway-hart'
 import { Vector3 } from 'three'
 import {
   buildFaceBasis,
@@ -171,7 +172,51 @@ function buildDualRawPolyhedron(sourceRaw: RawPolyhedron, dualId: string, dualNa
 
 const dodecahedron = buildDualRawPolyhedron(icosahedron, 'dodecahedron', 'Dodecahedron')
 
-const rawPolyhedra = [tetrahedron, cube, octahedron, dodecahedron, icosahedron]
+interface ArchimedeanSpec {
+  id: string
+  name: string
+  notation: string
+}
+
+function buildRawFromConway({ id, name, notation }: ArchimedeanSpec): RawPolyhedron {
+  const solid = conwayHart(notation)
+
+  return {
+    id,
+    name,
+    vertices: solid.positions.map(([x, y, z]) => [x, y, z] as [number, number, number]),
+    faces: solid.cells.map((face) => [...face]),
+  }
+}
+
+const archimedeanSpecs: ArchimedeanSpec[] = [
+  { id: 'truncated-tetrahedron', name: 'Truncated Tetrahedron', notation: 'tT' },
+  { id: 'cuboctahedron', name: 'Cuboctahedron', notation: 'aC' },
+  { id: 'truncated-cube', name: 'Truncated Cube', notation: 'tC' },
+  { id: 'truncated-octahedron', name: 'Truncated Octahedron', notation: 'tO' },
+  { id: 'rhombicuboctahedron', name: 'Rhombicuboctahedron', notation: 'eC' },
+  { id: 'truncated-cuboctahedron', name: 'Truncated Cuboctahedron', notation: 'bC' },
+  { id: 'snub-cube', name: 'Snub Cube', notation: 'sC' },
+  { id: 'icosidodecahedron', name: 'Icosidodecahedron', notation: 'aD' },
+  { id: 'truncated-dodecahedron', name: 'Truncated Dodecahedron', notation: 'tD' },
+  { id: 'truncated-icosahedron', name: 'Truncated Icosahedron', notation: 'tI' },
+  { id: 'rhombicosidodecahedron', name: 'Rhombicosidodecahedron', notation: 'eD' },
+  {
+    id: 'truncated-icosidodecahedron',
+    name: 'Truncated Icosidodecahedron',
+    notation: 'bD',
+  },
+  { id: 'snub-dodecahedron', name: 'Snub Dodecahedron', notation: 'sD' },
+]
+
+const rawPolyhedra = [
+  tetrahedron,
+  cube,
+  octahedron,
+  dodecahedron,
+  icosahedron,
+  ...archimedeanSpecs.map(buildRawFromConway),
+]
 
 function buildDerivedPolyhedron(rawInput: RawPolyhedron): DerivedPolyhedron {
   const raw = scaleRawPolyhedron(orientFacesOutward(rawInput))

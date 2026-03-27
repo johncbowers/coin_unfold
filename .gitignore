@@ -12,6 +12,7 @@ dist
 dist-ssr
 coverage
 *.tsbuildinfo
+*.tgz
 
 # Environment files
 .env
