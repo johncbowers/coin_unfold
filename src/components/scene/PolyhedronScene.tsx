@@ -2,7 +2,7 @@ import { ArcballControls, Line } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
 import { memo, useMemo, useState } from 'react'
 import { DoubleSide, Matrix4, Quaternion, Vector3 } from 'three'
-import { edgeKey } from '../../domain/geometry/polyhedronMath'
+import { computeSharedEdgeGeodesicPoint, edgeKey } from '../../domain/geometry/polyhedronMath'
 import type {
   CoinData,
   CutTree,
@@ -201,7 +201,15 @@ function SceneContent({
     const keepSegments = keepTree.dualEdgeIndices.flatMap((dualEdgeIndex) => {
       const dualEdge = polyhedron.dualEdges[dualEdgeIndex]
       const primalEdge = polyhedron.edges[dualEdge.primalEdgeIndex]
-      const edgeMidpoint = primalEdge.midpoint
+      const edgeStart = polyhedron.vertices[primalEdge.vertexIndices[0]]
+      const edgeEnd = polyhedron.vertices[primalEdge.vertexIndices[1]]
+      const [faceAIndex, faceBIndex] = dualEdge.faceIndices
+      const geodesicPoint = computeSharedEdgeGeodesicPoint(
+        polyhedron.faces[faceAIndex].incenter,
+        polyhedron.faces[faceBIndex].incenter,
+        edgeStart,
+        edgeEnd,
+      )
 
       return dualEdge.faceIndices.map((faceIndex) => {
         const face = polyhedron.faces[faceIndex]
@@ -210,8 +218,8 @@ function SceneContent({
         return {
           faceIndex,
           points: [
-            face.centroid.clone().add(offsetNormal),
-            edgeMidpoint.clone().add(offsetNormal),
+            face.incenter.clone().add(offsetNormal),
+            geodesicPoint.clone().add(offsetNormal),
           ],
         }
       })

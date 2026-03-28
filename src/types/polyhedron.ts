@@ -10,6 +10,16 @@ export interface RawPolyhedron {
   faces: number[][]
 }
 
+export interface PolyhedronOption {
+  id: string
+  name: string
+}
+
+export interface PolyhedronOptionGroup {
+  label: string
+  options: PolyhedronOption[]
+}
+
 export interface FaceData {
   index: number
   id: string

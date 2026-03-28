@@ -1,10 +1,10 @@
-import { Vector3 } from 'three'
 import {
   buildFaceBasis,
+  computeFaceIncircle,
+  buildDualRawPolyhedron,
   clampUnit,
   computeCentroid,
   computeFaceNormal,
-  distancePointToLine,
   edgeKey,
   facePairKey,
   orientFacesOutward,
@@ -15,6 +15,10 @@ import {
   archimedeanPolyhedronIds,
   archimedeanRawPolyhedraById,
 } from './archimedeanData'
+import {
+  catalanPolyhedronIds,
+  catalanRawPolyhedraById,
+} from './catalanData'
 import type {
   CoinData,
   DerivedPolyhedron,
@@ -130,58 +134,21 @@ const icosahedron: RawPolyhedron = {
   ],
 }
 
-function buildDualRawPolyhedron(sourceRaw: RawPolyhedron, dualId: string, dualName: string): RawPolyhedron {
-  const source = orientFacesOutward(sourceRaw)
-  const sourceVertices = source.vertices.map(toVector3)
-  const sourceFaceCentroids = source.faces.map((face) =>
-    computeCentroid(face.map((vertexIndex) => sourceVertices[vertexIndex])),
-  )
-
-  const dualVertices = sourceFaceCentroids.map((centroid) =>
-    [centroid.x, centroid.y, centroid.z] as [number, number, number],
-  )
-
-  const dualFaces = sourceVertices.map((vertex, vertexIndex) => {
-    const incidentFaceIndices = source.faces
-      .map((face, faceIndex) => ({ face, faceIndex }))
-      .filter(({ face }) => face.includes(vertexIndex))
-      .map(({ faceIndex }) => faceIndex)
-
-    const axis = vertex.clone().normalize()
-    const tangentSeed = Math.abs(axis.y) < 0.9
-      ? new Vector3(0, 1, 0)
-      : new Vector3(1, 0, 0)
-    const basisU = tangentSeed.clone().cross(axis).normalize()
-    const basisV = axis.clone().cross(basisU).normalize()
-
-    return incidentFaceIndices
-      .map((faceIndex) => {
-        const offset = sourceFaceCentroids[faceIndex].clone().sub(vertex)
-        const projected = offset.sub(axis.clone().multiplyScalar(offset.dot(axis)))
-        const angle = Math.atan2(projected.dot(basisV), projected.dot(basisU))
-        return { faceIndex, angle }
-      })
-      .sort((left, right) => left.angle - right.angle)
-      .map(({ faceIndex }) => faceIndex)
-  })
-
-  return {
-    id: dualId,
-    name: dualName,
-    vertices: dualVertices,
-    faces: dualFaces,
-  }
-}
-
 const dodecahedron = buildDualRawPolyhedron(icosahedron, 'dodecahedron', 'Dodecahedron')
 
 const archimedeanRawPolyhedra = archimedeanPolyhedronIds.map(
   (id) => archimedeanRawPolyhedraById[id],
 )
+const catalanRawPolyhedra = catalanPolyhedronIds.map(
+  (id) => catalanRawPolyhedraById[id],
+)
+
+export type PolyhedronRegistryGroup = 'Platonic Solids' | 'Archimedean Solids' | 'Catalan Polyhedra'
 
 export interface PolyhedronRegistryEntry {
   id: string
   name: string
+  group: PolyhedronRegistryGroup
   load: () => Promise<DerivedPolyhedron>
 }
 
@@ -194,7 +161,7 @@ function buildDerivedPolyhedron(rawInput: RawPolyhedron): DerivedPolyhedron {
     const centroid = computeCentroid(points)
     const normal = computeFaceNormal(points)
     const { basisU, basisV } = buildFaceBasis(points, normal)
-    const inradius = distancePointToLine(centroid, points[0], points[1])
+    const incircle = computeFaceIncircle(points, centroid, basisU, basisV)
 
     return {
       index: faceIndex,
@@ -204,8 +171,8 @@ function buildDerivedPolyhedron(rawInput: RawPolyhedron): DerivedPolyhedron {
       normal,
       basisU,
       basisV,
-      incenter: centroid.clone(),
-      inradius,
+      incenter: incircle.center3D ?? centroid.clone(),
+      inradius: incircle.radius ?? 0,
     }
   })
 
@@ -289,12 +256,16 @@ function buildDerivedPolyhedron(rawInput: RawPolyhedron): DerivedPolyhedron {
   }
 }
 
-function createStaticRegistryEntry(raw: RawPolyhedron): PolyhedronRegistryEntry {
+function createStaticRegistryEntry(
+  raw: RawPolyhedron,
+  group: PolyhedronRegistryGroup,
+): PolyhedronRegistryEntry {
   let cachedPromise: Promise<DerivedPolyhedron> | null = null
 
   return {
     id: raw.id,
     name: raw.name,
+    group,
     load: () => {
       cachedPromise ??= Promise.resolve(buildDerivedPolyhedron(raw))
       return cachedPromise
@@ -308,8 +279,9 @@ export const polyhedronRegistry: PolyhedronRegistryEntry[] = [
   octahedron,
   dodecahedron,
   icosahedron,
-].map(createStaticRegistryEntry)
-  .concat(archimedeanRawPolyhedra.map(createStaticRegistryEntry))
+].map((raw) => createStaticRegistryEntry(raw, 'Platonic Solids'))
+  .concat(archimedeanRawPolyhedra.map((raw) => createStaticRegistryEntry(raw, 'Archimedean Solids')))
+  .concat(catalanRawPolyhedra.map((raw) => createStaticRegistryEntry(raw, 'Catalan Polyhedra')))
 
 export function getPolyhedronById(polyhedronId: string) {
   const entry = polyhedronRegistry.find((candidate) => candidate.id === polyhedronId)

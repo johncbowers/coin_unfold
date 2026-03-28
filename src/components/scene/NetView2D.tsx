@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState } from 'react'
 import type { Matrix4, Vector3 } from 'three'
-import { edgeKey, transformPoint } from '../../domain/geometry/polyhedronMath'
+import { computeSharedEdgeGeodesicPoint, edgeKey, transformPoint } from '../../domain/geometry/polyhedronMath'
 import type { CoinData, CutTree, DerivedPolyhedron, KeepTree, RenderMode } from '../../types/polyhedron'
 
 interface Point2D {
@@ -113,18 +113,26 @@ export const NetView2D = memo(function NetView2D({
     const keepSegments = keepTree.dualEdgeIndices.flatMap((dualEdgeIndex) => {
       const dualEdge = polyhedron.dualEdges[dualEdgeIndex]
       const primalEdge = polyhedron.edges[dualEdge.primalEdgeIndex]
-      const edgeMidpoint = primalEdge.midpoint
+      const edgeStart = polyhedron.vertices[primalEdge.vertexIndices[0]]
+      const edgeEnd = polyhedron.vertices[primalEdge.vertexIndices[1]]
+      const [faceAIndex, faceBIndex] = dualEdge.faceIndices
+      const geodesicPoint = computeSharedEdgeGeodesicPoint(
+        polyhedron.faces[faceAIndex].incenter,
+        polyhedron.faces[faceBIndex].incenter,
+        edgeStart,
+        edgeEnd,
+      )
 
       return dualEdge.faceIndices.map((faceIndex) => {
         const face = polyhedron.faces[faceIndex]
         const start = projectPoint(
-          transformPoint(facePoses[faceIndex], face.centroid),
+          transformPoint(facePoses[faceIndex], face.incenter),
           rootFace.centroid,
           rootFace.basisU,
           rootFace.basisV,
         )
         const end = projectPoint(
-          transformPoint(facePoses[faceIndex], edgeMidpoint),
+          transformPoint(facePoses[faceIndex], geodesicPoint),
           rootFace.centroid,
           rootFace.basisU,
           rootFace.basisV,

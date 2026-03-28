@@ -24,6 +24,9 @@ coverage
 .vite
 *.local
 
+# Local data-extraction helpers
+scripts/*.mjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

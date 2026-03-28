@@ -7,7 +7,7 @@ import { analyzeKoebePolyhedron } from './domain/analysis/koebeAnalysis'
 import { buildCoins, getPolyhedronById, polyhedronRegistry } from './domain/polyhedra/registry'
 import { buildCutTree, buildKeepTree } from './domain/trees/spanningTrees'
 import { computeFacePoses, prepareFacePoseRig } from './domain/unfolding/computeUnfoldedState'
-import type { DerivedPolyhedron, RenderMode, TreeMethod } from './types/polyhedron'
+import type { DerivedPolyhedron, PolyhedronOptionGroup, RenderMode, TreeMethod } from './types/polyhedron'
 
 const PolyhedronScene = lazy(async () => {
   const module = await import('./components/scene/PolyhedronScene')
@@ -96,10 +96,25 @@ function App() {
   const [polyhedronLoadError, setPolyhedronLoadError] = useState<string | null>(null)
 
   const polyhedronEntry = useMemo(() => getPolyhedronById(polyhedronId), [polyhedronId])
-  const polyhedronOptions = useMemo(
-    () => polyhedronRegistry.map(({ id, name }) => ({ id, name })),
-    [],
-  )
+  const polyhedronOptions = useMemo<PolyhedronOptionGroup[]>(() => {
+    const groups = new Map<string, PolyhedronOptionGroup>()
+
+    for (const { group, id, name } of polyhedronRegistry) {
+      const existingGroup = groups.get(group)
+
+      if (existingGroup) {
+        existingGroup.options.push({ id, name })
+        continue
+      }
+
+      groups.set(group, {
+        label: group,
+        options: [{ id, name }],
+      })
+    }
+
+    return Array.from(groups.values())
+  }, [])
   const exportStem = useMemo(
     () => `${polyhedronId}-${method}-${renderMode}`,
     [method, polyhedronId, renderMode],

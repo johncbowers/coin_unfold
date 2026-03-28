@@ -1,14 +1,9 @@
 import { Vector3 } from 'three'
-import { edgeKey } from '../geometry/polyhedronMath'
+import { computeFaceIncircle, edgeKey } from '../geometry/polyhedronMath'
 import type { DerivedPolyhedron } from '../../types/polyhedron'
 
-interface Point2D {
-  x: number
-  y: number
-}
-
 interface FaceIncircleComputation {
-  center: Point2D | null
+  center: Vector3 | null
   radius: number | null
   maxResidual: number
   maxSegmentError: number
@@ -50,15 +45,8 @@ export function analyzeKoebePolyhedron(polyhedron: DerivedPolyhedron): KoebeAnal
 
   const faceComputations = polyhedron.faces.map((face) => {
     const points3D = face.vertexIndices.map((vertexIndex) => polyhedron.vertices[vertexIndex])
-    const points2D = points3D.map((point) => {
-      const offset = point.clone().sub(face.centroid)
-      return {
-        x: offset.dot(face.basisU),
-        y: offset.dot(face.basisV),
-      }
-    })
 
-    return computeFaceIncircle(polyhedron, face.index, points2D, points3D, edgeIndexByKey)
+    return computeFaceIncircleDiagnostics(polyhedron, face.index, points3D, edgeIndexByKey)
   })
 
   const faceAnalyses: KoebeFaceAnalysis[] = faceComputations.map((result, faceIndex) => ({
@@ -115,74 +103,23 @@ export function analyzeKoebePolyhedron(polyhedron: DerivedPolyhedron): KoebeAnal
   }
 }
 
-function computeFaceIncircle(
+function computeFaceIncircleDiagnostics(
   polyhedron: DerivedPolyhedron,
   faceIndex: number,
-  points2D: Point2D[],
   points3D: Vector3[],
   edgeIndexByKey: Map<string, number>,
 ): FaceIncircleComputation {
-  const signedArea = computeSignedArea(points2D)
-  const orientation = signedArea >= 0 ? 1 : -1
-  const rows: Array<{ a: number; b: number; c: number; rhs: number; inward: Point2D }> = []
   const face = polyhedron.faces[faceIndex]
-  const segmentParameters: Array<{ edgeIndex: number; t: number; tangencyPoint: Vector3 }> = []
+  const incircle = computeFaceIncircle(points3D, face.centroid, face.basisU, face.basisV)
 
-  for (let index = 0; index < points2D.length; index += 1) {
-    const current = points2D[index]
-    const next = points2D[(index + 1) % points2D.length]
-    const dx = next.x - current.x
-    const dy = next.y - current.y
-    const edgeLength = Math.hypot(dx, dy)
-
-    if (edgeLength < 1e-10) {
-      return invalidFaceResult()
-    }
-
-    const inward = {
-      x: orientation * (-dy / edgeLength),
-      y: orientation * (dx / edgeLength),
-    }
-
-    rows.push({
-      a: inward.x,
-      b: inward.y,
-      c: -1,
-      rhs: inward.x * current.x + inward.y * current.y,
-      inward,
-    })
-  }
-
-  const solution = solveLeastSquares3x3(rows)
-
-  if (!solution) {
+  if (!incircle.center3D || incircle.radius === null) {
     return invalidFaceResult()
   }
 
-  const [centerX, centerY, radius] = solution
-  const center2D = { x: centerX, y: centerY }
-  const maxResidual = rows.reduce((maximum, row) => {
-    const distance = row.a * centerX + row.b * centerY - row.rhs
-    return Math.max(maximum, Math.abs(distance - radius))
-  }, 0)
+  const segmentParameters: Array<{ edgeIndex: number; t: number; tangencyPoint: Vector3 }> = []
 
-  let maxSegmentError = 0
-
-  for (let index = 0; index < rows.length; index += 1) {
-    const current2D = points2D[index]
-    const next2D = points2D[(index + 1) % points2D.length]
-    const tangent2D = {
-      x: center2D.x - rows[index].inward.x * radius,
-      y: center2D.y - rows[index].inward.y * radius,
-    }
-    const edgeVector2D = {
-      x: next2D.x - current2D.x,
-      y: next2D.y - current2D.y,
-    }
-    const edgeLengthSq = edgeVector2D.x * edgeVector2D.x + edgeVector2D.y * edgeVector2D.y
-    const t = ((tangent2D.x - current2D.x) * edgeVector2D.x + (tangent2D.y - current2D.y) * edgeVector2D.y) / edgeLengthSq
-    const parameterError = Math.max(0, -t, t - 1)
-    maxSegmentError = Math.max(maxSegmentError, parameterError)
+  for (let index = 0; index < incircle.tangencyParameters.length; index += 1) {
+    const t = incircle.tangencyParameters[index]
 
     const current3D = points3D[index]
     const next3D = points3D[(index + 1) % points3D.length]
@@ -194,22 +131,17 @@ function computeFaceIncircle(
     }
   }
 
-  const faceScale = averageEdgeLength(points3D)
-  const residualTolerance = Math.max(1e-5, faceScale * 1e-4)
-  const segmentTolerance = 1e-4
   const tangencyPointsByEdgeIndex = new Map(
     segmentParameters.map(({ edgeIndex, tangencyPoint }) => [edgeIndex, tangencyPoint]),
   )
 
   return {
-    center: center2D,
-    radius,
-    maxResidual,
-    maxSegmentError,
+    center: incircle.center3D,
+    radius: incircle.radius,
+    maxResidual: incircle.maxResidual,
+    maxSegmentError: incircle.maxSegmentError,
     tangencyPointsByEdgeIndex,
-    isTangential: radius > residualTolerance
-      && maxResidual <= residualTolerance
-      && maxSegmentError <= segmentTolerance,
+    isTangential: incircle.isTangential,
   }
 }
 
@@ -224,93 +156,3 @@ function invalidFaceResult(): FaceIncircleComputation {
   }
 }
 
-function computeSignedArea(points: Point2D[]) {
-  let area = 0
-
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index]
-    const next = points[(index + 1) % points.length]
-    area += current.x * next.y - next.x * current.y
-  }
-
-  return area * 0.5
-}
-
-function averageEdgeLength(points: Vector3[]) {
-  let total = 0
-
-  for (let index = 0; index < points.length; index += 1) {
-    total += points[index].distanceTo(points[(index + 1) % points.length])
-  }
-
-  return total / points.length
-}
-
-function solveLeastSquares3x3(rows: Array<{ a: number; b: number; c: number; rhs: number }>) {
-  const matrix = [
-    [0, 0, 0],
-    [0, 0, 0],
-    [0, 0, 0],
-  ]
-  const vector = [0, 0, 0]
-
-  for (const row of rows) {
-    matrix[0][0] += row.a * row.a
-    matrix[0][1] += row.a * row.b
-    matrix[0][2] += row.a * row.c
-    matrix[1][0] += row.b * row.a
-    matrix[1][1] += row.b * row.b
-    matrix[1][2] += row.b * row.c
-    matrix[2][0] += row.c * row.a
-    matrix[2][1] += row.c * row.b
-    matrix[2][2] += row.c * row.c
-
-    vector[0] += row.a * row.rhs
-    vector[1] += row.b * row.rhs
-    vector[2] += row.c * row.rhs
-  }
-
-  return solve3x3(matrix, vector)
-}
-
-function solve3x3(matrix: number[][], vector: number[]) {
-  const augmented = matrix.map((row, index) => [...row, vector[index]])
-
-  for (let pivotIndex = 0; pivotIndex < 3; pivotIndex += 1) {
-    let bestRow = pivotIndex
-
-    for (let rowIndex = pivotIndex + 1; rowIndex < 3; rowIndex += 1) {
-      if (Math.abs(augmented[rowIndex][pivotIndex]) > Math.abs(augmented[bestRow][pivotIndex])) {
-        bestRow = rowIndex
-      }
-    }
-
-    if (Math.abs(augmented[bestRow][pivotIndex]) < 1e-10) {
-      return null
-    }
-
-    if (bestRow !== pivotIndex) {
-      ;[augmented[pivotIndex], augmented[bestRow]] = [augmented[bestRow], augmented[pivotIndex]]
-    }
-
-    const pivot = augmented[pivotIndex][pivotIndex]
-
-    for (let columnIndex = pivotIndex; columnIndex < 4; columnIndex += 1) {
-      augmented[pivotIndex][columnIndex] /= pivot
-    }
-
-    for (let rowIndex = 0; rowIndex < 3; rowIndex += 1) {
-      if (rowIndex === pivotIndex) {
-        continue
-      }
-
-      const factor = augmented[rowIndex][pivotIndex]
-
-      for (let columnIndex = pivotIndex; columnIndex < 4; columnIndex += 1) {
-        augmented[rowIndex][columnIndex] -= factor * augmented[pivotIndex][columnIndex]
-      }
-    }
-  }
-
-  return [augmented[0][3], augmented[1][3], augmented[2][3]] as const
-}

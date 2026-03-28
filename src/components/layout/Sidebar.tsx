@@ -1,11 +1,18 @@
 import { memo } from 'react'
 
-import type { CutTree, DerivedPolyhedron, KeepTree, RenderMode, TreeMethod } from '../../types/polyhedron'
+import type {
+  CutTree,
+  DerivedPolyhedron,
+  KeepTree,
+  PolyhedronOptionGroup,
+  RenderMode,
+  TreeMethod,
+} from '../../types/polyhedron'
 
 type ThemeMode = 'light' | 'dark'
 
 interface SidebarProps {
-  polyhedronOptions: Array<{ id: string; name: string }>
+  polyhedronOptions: PolyhedronOptionGroup[]
   polyhedronId: string
   onPolyhedronChange: (id: string) => void
   method: TreeMethod
@@ -94,10 +101,14 @@ export const Sidebar = memo(function Sidebar({
         <label className="field">
           <span>Model</span>
           <select value={polyhedronId} onChange={(event) => onPolyhedronChange(event.target.value)}>
-            {polyhedronOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
+            {polyhedronOptions.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
