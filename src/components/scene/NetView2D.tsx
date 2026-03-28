@@ -26,6 +26,7 @@ interface NetView2DProps {
   cutTree: CutTree
   facePoses: Matrix4[]
   coins: CoinData[]
+  overlapFacePairs: Array<[number, number]>
   themeMode: 'light' | 'dark'
   exportFileName: string
   renderMode: RenderMode
@@ -77,6 +78,7 @@ export const NetView2D = memo(function NetView2D({
   cutTree,
   facePoses,
   coins,
+  overlapFacePairs,
   themeMode,
   exportFileName,
   renderMode,
@@ -168,16 +170,26 @@ export const NetView2D = memo(function NetView2D({
 
       return {
         faceIndex: coin.faceIndex,
+        center: projectPoint(center, rootFace.centroid, rootFace.basisU, rootFace.basisV),
         points: worldPoints.map((point) =>
           projectPoint(point, rootFace.centroid, rootFace.basisU, rootFace.basisV),
         ),
       }
     })
 
+    const coinCenterByFace = new Map(coinPolygons.map((coin) => [coin.faceIndex, coin.center]))
+    const overlapSegments = overlapFacePairs.flatMap(([faceA, faceB]) => {
+      const centerA = coinCenterByFace.get(faceA)
+      const centerB = coinCenterByFace.get(faceB)
+
+      return centerA && centerB ? [[centerA, centerB] as [Point2D, Point2D]] : []
+    })
+
     const allPoints = [
       ...facePolygons.flat(),
       ...keepSegments.flat(),
       ...cutSegments.flat(),
+      ...overlapSegments.flat(),
       ...coinPolygons.flatMap((coin) => coin.points),
     ]
 
@@ -214,6 +226,7 @@ export const NetView2D = memo(function NetView2D({
       keepSegments,
       cutSegments,
       coinPolygons,
+      overlapSegments,
       exportViewBox: {
         minX: bounds.minX - exportPaddingX,
         minY: bounds.minY - exportPaddingY,
@@ -227,6 +240,7 @@ export const NetView2D = memo(function NetView2D({
     cutTree.primalEdgeIndices,
     facePoses,
     keepTree.dualEdgeIndices,
+    overlapFacePairs,
     polyhedron,
     rootFace.basisU,
     rootFace.basisV,
@@ -249,6 +263,8 @@ export const NetView2D = memo(function NetView2D({
         edge: '#f8fafc',
         coin: '#facc15',
         coinStroke: '#a16207',
+        overlap: '#fb7185',
+        overlapFill: 'rgba(251, 113, 133, 0.22)',
         keep: '#14b8a6',
         cut: '#f43f5e',
       }
@@ -258,9 +274,15 @@ export const NetView2D = memo(function NetView2D({
         edge: '#0f172a',
         coin: '#facc15',
         coinStroke: '#a16207',
+        overlap: '#dc2626',
+        overlapFill: 'rgba(220, 38, 38, 0.14)',
         keep: '#0f766e',
         cut: '#dc2626',
       }
+  const overlapFaceSet = useMemo(
+    () => new Set(overlapFacePairs.flatMap(([faceA, faceB]) => [faceA, faceB])),
+    [overlapFacePairs],
+  )
 
   const downloadSvg = () => {
     const svgElement = svgRef.current
@@ -446,15 +468,31 @@ export const NetView2D = memo(function NetView2D({
             />
           ))}
 
+        {projected.overlapSegments.map((segment, index) => (
+          <line
+            key={`net-overlap-${index}`}
+            x1={segment[0].x}
+            y1={segment[0].y}
+            x2={segment[1].x}
+            y2={segment[1].y}
+            stroke={palette.overlap}
+            strokeOpacity={0.9}
+            strokeWidth="2.5px"
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+
         {showCoinMeshes &&
           projected.coinPolygons.map((coin) => (
             <polygon
               key={`net-coin-${coin.faceIndex}`}
               points={pointsToSvg(coin.points)}
-              fill={palette.coin}
+              fill={overlapFaceSet.has(coin.faceIndex) ? palette.overlapFill : palette.coin}
               fillOpacity={renderMode === 'coins-only' ? 0.94 : 0.82}
-              stroke={palette.coinStroke}
-              strokeWidth="1.35px"
+              stroke={overlapFaceSet.has(coin.faceIndex) ? palette.overlap : palette.coinStroke}
+              strokeWidth={overlapFaceSet.has(coin.faceIndex) ? '2.3px' : '1.35px'}
               strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
             />

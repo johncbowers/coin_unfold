@@ -3,6 +3,7 @@ import { Vector3 } from 'three'
 import './App.css'
 import { AnalysisPanel } from './components/layout/AnalysisPanel'
 import { Sidebar } from './components/layout/Sidebar'
+import { analyzeInversiveDistances } from './domain/analysis/inversiveDistanceAnalysis'
 import { analyzeKoebePolyhedron } from './domain/analysis/koebeAnalysis'
 import { buildCoins, getPolyhedronById, polyhedronRegistry } from './domain/polyhedra/registry'
 import { buildCutTree, buildKeepTree } from './domain/trees/spanningTrees'
@@ -182,6 +183,12 @@ function App() {
     () => (polyhedron ? analyzeKoebePolyhedron(polyhedron) : null),
     [polyhedron],
   )
+  const inversiveDistanceAnalysis = useMemo(
+    () => (polyhedron && keepTree && netFacePoses
+      ? analyzeInversiveDistances(polyhedron, keepTree, netFacePoses)
+      : null),
+    [keepTree, netFacePoses, polyhedron],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -270,7 +277,7 @@ function App() {
   }, [])
 
   const isReady = polyhedron !== null && keepTree !== null && cutTree !== null && coins !== null
-    && facePoses !== null && netFacePoses !== null && koebeAnalysis !== null
+    && facePoses !== null && netFacePoses !== null && koebeAnalysis !== null && inversiveDistanceAnalysis !== null
 
   return (
     <div className="app-shell">
@@ -445,6 +452,7 @@ function App() {
                       cutTree={cutTree!}
                       facePoses={netFacePoses!}
                       coins={coins!}
+                      overlapFacePairs={inversiveDistanceAnalysis!.overlapFacePairs}
                       themeMode={themeMode}
                       exportFileName={`${exportStem}-2d-net.svg`}
                       renderMode={renderMode}
@@ -454,7 +462,10 @@ function App() {
                     />
                   </Suspense>
 
-                  <AnalysisPanel koebeAnalysis={koebeAnalysis!} />
+                  <AnalysisPanel
+                    koebeAnalysis={koebeAnalysis!}
+                    inversiveDistanceAnalysis={inversiveDistanceAnalysis!}
+                  />
                 </>
               )
             : (

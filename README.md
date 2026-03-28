@@ -1,3 +1,7 @@
+# Coin Unfold
+
+Reference notes for the inversive-distance formulas used by the project are in [docs/references.md](docs/references.md).
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

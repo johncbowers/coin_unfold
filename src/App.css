@@ -398,6 +398,10 @@ button:hover {
   color: var(--text-soft);
 }
 
+.analysis-subsection-header {
+  margin-top: 1rem;
+}
+
 .mobile-controls-button,
 .sidebar-close-button,
 .sidebar-scrim {
