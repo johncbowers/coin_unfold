@@ -11,6 +11,10 @@ import {
   scaleRawPolyhedron,
   toVector3,
 } from '../geometry/polyhedronMath'
+import {
+  archimedeanPolyhedronIds,
+  archimedeanRawPolyhedraById,
+} from './archimedeanData'
 import type {
   CoinData,
   DerivedPolyhedron,
@@ -171,50 +175,9 @@ function buildDualRawPolyhedron(sourceRaw: RawPolyhedron, dualId: string, dualNa
 
 const dodecahedron = buildDualRawPolyhedron(icosahedron, 'dodecahedron', 'Dodecahedron')
 
-interface ArchimedeanSpec {
-  id: string
-  name: string
-  notation: string
-}
-
-type ConwayHartFn = (notation: string) => {
-  positions: Array<[number, number, number]>
-  cells: number[][]
-}
-
-function buildRawFromConway(
-  { id, name, notation }: ArchimedeanSpec,
-  conwayHart: ConwayHartFn,
-): RawPolyhedron {
-  const solid = conwayHart(notation)
-
-  return {
-    id,
-    name,
-    vertices: solid.positions.map(([x, y, z]) => [x, y, z] as [number, number, number]),
-    faces: solid.cells.map((face) => [...face]),
-  }
-}
-
-const archimedeanSpecs: ArchimedeanSpec[] = [
-  { id: 'truncated-tetrahedron', name: 'Truncated Tetrahedron', notation: 'tT' },
-  { id: 'cuboctahedron', name: 'Cuboctahedron', notation: 'aC' },
-  { id: 'truncated-cube', name: 'Truncated Cube', notation: 'tC' },
-  { id: 'truncated-octahedron', name: 'Truncated Octahedron', notation: 'tO' },
-  { id: 'rhombicuboctahedron', name: 'Rhombicuboctahedron', notation: 'eC' },
-  { id: 'truncated-cuboctahedron', name: 'Truncated Cuboctahedron', notation: 'bC' },
-  { id: 'snub-cube', name: 'Snub Cube', notation: 'sC' },
-  { id: 'icosidodecahedron', name: 'Icosidodecahedron', notation: 'aD' },
-  { id: 'truncated-dodecahedron', name: 'Truncated Dodecahedron', notation: 'tD' },
-  { id: 'truncated-icosahedron', name: 'Truncated Icosahedron', notation: 'tI' },
-  { id: 'rhombicosidodecahedron', name: 'Rhombicosidodecahedron', notation: 'eD' },
-  {
-    id: 'truncated-icosidodecahedron',
-    name: 'Truncated Icosidodecahedron',
-    notation: 'bD',
-  },
-  { id: 'snub-dodecahedron', name: 'Snub Dodecahedron', notation: 'sD' },
-]
+const archimedeanRawPolyhedra = archimedeanPolyhedronIds.map(
+  (id) => archimedeanRawPolyhedraById[id],
+)
 
 export interface PolyhedronRegistryEntry {
   id: string
@@ -339,22 +302,6 @@ function createStaticRegistryEntry(raw: RawPolyhedron): PolyhedronRegistryEntry 
   }
 }
 
-function createArchimedeanRegistryEntry(spec: ArchimedeanSpec): PolyhedronRegistryEntry {
-  let cachedPromise: Promise<DerivedPolyhedron> | null = null
-
-  return {
-    id: spec.id,
-    name: spec.name,
-    load: () => {
-      cachedPromise ??= import('conway-hart').then(({ default: conwayHart }) =>
-        buildDerivedPolyhedron(buildRawFromConway(spec, conwayHart as ConwayHartFn)),
-      )
-
-      return cachedPromise
-    },
-  }
-}
-
 export const polyhedronRegistry: PolyhedronRegistryEntry[] = [
   tetrahedron,
   cube,
@@ -362,7 +309,7 @@ export const polyhedronRegistry: PolyhedronRegistryEntry[] = [
   dodecahedron,
   icosahedron,
 ].map(createStaticRegistryEntry)
-  .concat(archimedeanSpecs.map(createArchimedeanRegistryEntry))
+  .concat(archimedeanRawPolyhedra.map(createStaticRegistryEntry))
 
 export function getPolyhedronById(polyhedronId: string) {
   const entry = polyhedronRegistry.find((candidate) => candidate.id === polyhedronId)

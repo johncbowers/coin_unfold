@@ -1,7 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Vector3 } from 'three'
 import './App.css'
+import { AnalysisPanel } from './components/layout/AnalysisPanel'
 import { Sidebar } from './components/layout/Sidebar'
+import { analyzeKoebePolyhedron } from './domain/analysis/koebeAnalysis'
 import { buildCoins, getPolyhedronById, polyhedronRegistry } from './domain/polyhedra/registry'
 import { buildCutTree, buildKeepTree } from './domain/trees/spanningTrees'
 import { computeFacePoses, prepareFacePoseRig } from './domain/unfolding/computeUnfoldedState'
@@ -161,6 +163,10 @@ function App() {
       distance: radius * 3.1,
     }
   }, [facePoses, polyhedron])
+  const koebeAnalysis = useMemo(
+    () => (polyhedron ? analyzeKoebePolyhedron(polyhedron) : null),
+    [polyhedron],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -249,7 +255,7 @@ function App() {
   }, [])
 
   const isReady = polyhedron !== null && keepTree !== null && cutTree !== null && coins !== null
-    && facePoses !== null && netFacePoses !== null
+    && facePoses !== null && netFacePoses !== null && koebeAnalysis !== null
 
   return (
     <div className="app-shell">
@@ -432,6 +438,8 @@ function App() {
                       showCutTree={showCutTree}
                     />
                   </Suspense>
+
+                  <AnalysisPanel koebeAnalysis={koebeAnalysis!} />
                 </>
               )
             : (
