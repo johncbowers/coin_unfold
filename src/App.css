@@ -53,6 +53,22 @@
   margin-top: auto;
 }
 
+.loading-sidebar {
+  min-height: 18rem;
+  justify-content: center;
+}
+
+.loading-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.loading-panel h2 {
+  margin: 0;
+}
+
 .panel-section {
   border: 1px solid var(--border);
   background: var(--panel-muted);
@@ -221,6 +237,11 @@ button:hover {
   height: min(56vh, 34rem);
   min-height: 22rem;
   position: relative;
+}
+
+.viewer-loading-panel {
+  min-height: 32rem;
+  margin: 1rem;
 }
 
 .canvas-shell canvas {

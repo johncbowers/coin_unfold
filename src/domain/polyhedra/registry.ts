@@ -1,4 +1,3 @@
-import conwayHart from 'conway-hart'
 import { Vector3 } from 'three'
 import {
   buildFaceBasis,
@@ -178,7 +177,15 @@ interface ArchimedeanSpec {
   notation: string
 }
 
-function buildRawFromConway({ id, name, notation }: ArchimedeanSpec): RawPolyhedron {
+type ConwayHartFn = (notation: string) => {
+  positions: Array<[number, number, number]>
+  cells: number[][]
+}
+
+function buildRawFromConway(
+  { id, name, notation }: ArchimedeanSpec,
+  conwayHart: ConwayHartFn,
+): RawPolyhedron {
   const solid = conwayHart(notation)
 
   return {
@@ -209,14 +216,11 @@ const archimedeanSpecs: ArchimedeanSpec[] = [
   { id: 'snub-dodecahedron', name: 'Snub Dodecahedron', notation: 'sD' },
 ]
 
-const rawPolyhedra = [
-  tetrahedron,
-  cube,
-  octahedron,
-  dodecahedron,
-  icosahedron,
-  ...archimedeanSpecs.map(buildRawFromConway),
-]
+export interface PolyhedronRegistryEntry {
+  id: string
+  name: string
+  load: () => Promise<DerivedPolyhedron>
+}
 
 function buildDerivedPolyhedron(rawInput: RawPolyhedron): DerivedPolyhedron {
   const raw = scaleRawPolyhedron(orientFacesOutward(rawInput))
@@ -322,11 +326,43 @@ function buildDerivedPolyhedron(rawInput: RawPolyhedron): DerivedPolyhedron {
   }
 }
 
-export const polyhedronRegistry = rawPolyhedra.map((raw) => ({
-  id: raw.id,
-  name: raw.name,
-  create: () => buildDerivedPolyhedron(raw),
-}))
+function createStaticRegistryEntry(raw: RawPolyhedron): PolyhedronRegistryEntry {
+  let cachedPromise: Promise<DerivedPolyhedron> | null = null
+
+  return {
+    id: raw.id,
+    name: raw.name,
+    load: () => {
+      cachedPromise ??= Promise.resolve(buildDerivedPolyhedron(raw))
+      return cachedPromise
+    },
+  }
+}
+
+function createArchimedeanRegistryEntry(spec: ArchimedeanSpec): PolyhedronRegistryEntry {
+  let cachedPromise: Promise<DerivedPolyhedron> | null = null
+
+  return {
+    id: spec.id,
+    name: spec.name,
+    load: () => {
+      cachedPromise ??= import('conway-hart').then(({ default: conwayHart }) =>
+        buildDerivedPolyhedron(buildRawFromConway(spec, conwayHart as ConwayHartFn)),
+      )
+
+      return cachedPromise
+    },
+  }
+}
+
+export const polyhedronRegistry: PolyhedronRegistryEntry[] = [
+  tetrahedron,
+  cube,
+  octahedron,
+  dodecahedron,
+  icosahedron,
+].map(createStaticRegistryEntry)
+  .concat(archimedeanSpecs.map(createArchimedeanRegistryEntry))
 
 export function getPolyhedronById(polyhedronId: string) {
   const entry = polyhedronRegistry.find((candidate) => candidate.id === polyhedronId)

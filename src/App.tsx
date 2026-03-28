@@ -1,13 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Vector3 } from 'three'
 import './App.css'
 import { Sidebar } from './components/layout/Sidebar'
-import { NetView2D } from './components/scene/NetView2D'
-import { PolyhedronScene } from './components/scene/PolyhedronScene'
 import { buildCoins, getPolyhedronById, polyhedronRegistry } from './domain/polyhedra/registry'
 import { buildCutTree, buildKeepTree } from './domain/trees/spanningTrees'
 import { computeFacePoses, prepareFacePoseRig } from './domain/unfolding/computeUnfoldedState'
-import type { RenderMode, TreeMethod } from './types/polyhedron'
+import type { DerivedPolyhedron, RenderMode, TreeMethod } from './types/polyhedron'
+
+const PolyhedronScene = lazy(async () => {
+  const module = await import('./components/scene/PolyhedronScene')
+  return { default: module.PolyhedronScene }
+})
+
+const NetView2D = lazy(async () => {
+  const module = await import('./components/scene/NetView2D')
+  return { default: module.NetView2D }
+})
 
 type ThemeMode = 'light' | 'dark'
 
@@ -82,8 +90,10 @@ function App() {
   const frameRef = useRef<number | null>(null)
   const lastTimestampRef = useRef<number | null>(null)
   const canvasShellRef = useRef<HTMLDivElement | null>(null)
+  const [polyhedron, setPolyhedron] = useState<DerivedPolyhedron | null>(null)
+  const [polyhedronLoadError, setPolyhedronLoadError] = useState<string | null>(null)
 
-  const polyhedron = useMemo(() => getPolyhedronById(polyhedronId).create(), [polyhedronId])
+  const polyhedronEntry = useMemo(() => getPolyhedronById(polyhedronId), [polyhedronId])
   const polyhedronOptions = useMemo(
     () => polyhedronRegistry.map(({ id, name }) => ({ id, name })),
     [],
@@ -93,24 +103,39 @@ function App() {
     [method, polyhedronId, renderMode],
   )
 
-  const activeRootFaceIndex = Math.min(rootFaceIndex, polyhedron.faces.length - 1)
+  const activeRootFaceIndex = polyhedron
+    ? Math.min(rootFaceIndex, polyhedron.faces.length - 1)
+    : rootFaceIndex
 
   const keepTree = useMemo(
-    () => buildKeepTree(polyhedron, method, activeRootFaceIndex),
+    () => (polyhedron ? buildKeepTree(polyhedron, method, activeRootFaceIndex) : null),
     [activeRootFaceIndex, method, polyhedron],
   )
-  const cutTree = useMemo(() => buildCutTree(polyhedron, keepTree), [keepTree, polyhedron])
-  const coins = useMemo(() => buildCoins(polyhedron), [polyhedron])
-  const facePoseRig = useMemo(() => prepareFacePoseRig(polyhedron, keepTree), [keepTree, polyhedron])
+  const cutTree = useMemo(
+    () => (polyhedron && keepTree ? buildCutTree(polyhedron, keepTree) : null),
+    [keepTree, polyhedron],
+  )
+  const coins = useMemo(() => (polyhedron ? buildCoins(polyhedron) : null), [polyhedron])
+  const facePoseRig = useMemo(
+    () => (polyhedron && keepTree ? prepareFacePoseRig(polyhedron, keepTree) : null),
+    [keepTree, polyhedron],
+  )
   const facePoses = useMemo(
-    () => computeFacePoses(facePoseRig, currentT),
+    () => (facePoseRig ? computeFacePoses(facePoseRig, currentT) : null),
     [currentT, facePoseRig],
   )
   const netFacePoses = useMemo(
-    () => computeFacePoses(facePoseRig, 1),
+    () => (facePoseRig ? computeFacePoses(facePoseRig, 1) : null),
     [facePoseRig],
   )
   const sceneView = useMemo(() => {
+    if (!polyhedron || !facePoses) {
+      return {
+        target: new Vector3(0, 0, 0),
+        distance: 8,
+      }
+    }
+
     const allPoints = polyhedron.faces.flatMap((face, faceIndex) =>
       face.vertexIndices.map((vertexIndex) =>
         polyhedron.vertices[vertexIndex].clone().applyMatrix4(facePoses[faceIndex]),
@@ -135,7 +160,36 @@ function App() {
       target,
       distance: radius * 3.1,
     }
-  }, [facePoses, polyhedron.faces, polyhedron.vertices])
+  }, [facePoses, polyhedron])
+
+  useEffect(() => {
+    let cancelled = false
+
+    setPolyhedron(null)
+    setPolyhedronLoadError(null)
+
+    polyhedronEntry.load()
+      .then((nextPolyhedron) => {
+        if (cancelled) {
+          return
+        }
+
+        setPolyhedron(nextPolyhedron)
+        setRootFaceIndex((value) => Math.min(value, nextPolyhedron.faces.length - 1))
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return
+        }
+
+        const message = error instanceof Error ? error.message : 'Unknown loading failure'
+        setPolyhedronLoadError(message)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [polyhedronEntry])
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode
@@ -194,6 +248,9 @@ function App() {
     setFitViewNonce((value) => value + 1)
   }, [])
 
+  const isReady = polyhedron !== null && keepTree !== null && cutTree !== null && coins !== null
+    && facePoses !== null && netFacePoses !== null
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -224,30 +281,45 @@ function App() {
           >
             Close
           </button>
-          <Sidebar
-            polyhedronOptions={polyhedronOptions}
-            polyhedronId={polyhedronId}
-            onPolyhedronChange={handlePolyhedronChange}
-            method={method}
-            onMethodChange={setMethod}
-            rootFaceIndex={activeRootFaceIndex}
-            onRootFaceChange={setRootFaceIndex}
-            renderMode={renderMode}
-            onRenderModeChange={setRenderMode}
-            showEdges={showEdges}
-            onShowEdgesChange={setShowEdges}
-            showKeepTree={showKeepTree}
-            onShowKeepTreeChange={setShowKeepTree}
-            showCutTree={showCutTree}
-            onShowCutTreeChange={setShowCutTree}
-            animationSpeed={animationSpeed}
-            onAnimationSpeedChange={setAnimationSpeed}
-            themeMode={themeMode}
-            onThemeModeChange={setThemeMode}
-            polyhedron={polyhedron}
-            keepTree={keepTree}
-            cutTree={cutTree}
-          />
+          {isReady
+            ? (
+                <Sidebar
+                  polyhedronOptions={polyhedronOptions}
+                  polyhedronId={polyhedronId}
+                  onPolyhedronChange={handlePolyhedronChange}
+                  method={method}
+                  onMethodChange={setMethod}
+                  rootFaceIndex={activeRootFaceIndex}
+                  onRootFaceChange={setRootFaceIndex}
+                  renderMode={renderMode}
+                  onRenderModeChange={setRenderMode}
+                  showEdges={showEdges}
+                  onShowEdgesChange={setShowEdges}
+                  showKeepTree={showKeepTree}
+                  onShowKeepTreeChange={setShowKeepTree}
+                  showCutTree={showCutTree}
+                  onShowCutTreeChange={setShowCutTree}
+                  animationSpeed={animationSpeed}
+                  onAnimationSpeedChange={setAnimationSpeed}
+                  themeMode={themeMode}
+                  onThemeModeChange={setThemeMode}
+                  polyhedron={polyhedron!}
+                  keepTree={keepTree!}
+                  cutTree={cutTree!}
+                />
+              )
+            : (
+                <aside className="sidebar loading-sidebar">
+                  <section className="panel-section loading-panel">
+                    <h2>{polyhedronLoadError ? 'Load failed' : 'Loading polyhedron'}</h2>
+                    <p className="caption">
+                      {polyhedronLoadError
+                        ? `Could not load ${polyhedronEntry.name}: ${polyhedronLoadError}`
+                        : `Preparing ${polyhedronEntry.name}...`}
+                    </p>
+                  </section>
+                </aside>
+              )}
         </div>
         <button
           type="button"
@@ -298,61 +370,80 @@ function App() {
             </div>
           </div>
 
-          <div className="viewer-meta">
-            <span>{polyhedron.name}</span>
-            <span>Root face {activeRootFaceIndex}</span>
-            <span>{method.toUpperCase()} keep tree</span>
-          </div>
+          {isReady
+            ? (
+                <>
+                  <div className="viewer-meta">
+                    <span>{polyhedron!.name}</span>
+                    <span>Root face {activeRootFaceIndex}</span>
+                    <span>{method.toUpperCase()} keep tree</span>
+                  </div>
 
-          <div className="canvas-shell" ref={canvasShellRef}>
-            <div className="view-overlay-controls">
-              <button
-                type="button"
-                className="view-overlay-button"
-                onClick={() => {
-                  setFitViewNonce((value) => value + 1)
-                }}
-              >
-                Fit view
-              </button>
-              <button
-                type="button"
-                className="view-overlay-button secondary-overlay-button"
-                onClick={downloadCurrentViewPng}
-              >
-                Download PNG
-              </button>
-            </div>
-            <PolyhedronScene
-              key={`scene-${fitViewNonce}`}
-              polyhedron={polyhedron}
-              keepTree={keepTree}
-              cutTree={cutTree}
-              facePoses={facePoses}
-              coins={coins}
-              cameraTarget={sceneView.target}
-              cameraDistance={sceneView.distance}
-              themeMode={themeMode}
-              renderMode={renderMode}
-              showEdges={showEdges}
-              showKeepTree={showKeepTree}
-              showCutTree={showCutTree}
-            />
-          </div>
+                  <div className="canvas-shell" ref={canvasShellRef}>
+                    <div className="view-overlay-controls">
+                      <button
+                        type="button"
+                        className="view-overlay-button"
+                        onClick={() => {
+                          setFitViewNonce((value) => value + 1)
+                        }}
+                      >
+                        Fit view
+                      </button>
+                      <button
+                        type="button"
+                        className="view-overlay-button secondary-overlay-button"
+                        onClick={downloadCurrentViewPng}
+                      >
+                        Download PNG
+                      </button>
+                    </div>
+                    <Suspense fallback={<div className="loading-panel viewer-loading-panel"><h2>Loading 3D viewer</h2><p className="caption">Streaming interactive scene assets...</p></div>}>
+                      <PolyhedronScene
+                        key={`scene-${fitViewNonce}`}
+                        polyhedron={polyhedron!}
+                        keepTree={keepTree!}
+                        cutTree={cutTree!}
+                        facePoses={facePoses!}
+                        coins={coins!}
+                        cameraTarget={sceneView.target}
+                        cameraDistance={sceneView.distance}
+                        themeMode={themeMode}
+                        renderMode={renderMode}
+                        showEdges={showEdges}
+                        showKeepTree={showKeepTree}
+                        showCutTree={showCutTree}
+                      />
+                    </Suspense>
+                  </div>
 
-          <NetView2D
-            polyhedron={polyhedron}
-            keepTree={keepTree}
-            cutTree={cutTree}
-            facePoses={netFacePoses}
-            coins={coins}
-            themeMode={themeMode}
-            exportFileName={`${exportStem}-2d-net.svg`}
-            renderMode={renderMode}
-            showEdges={showEdges}
-            showKeepTree={showKeepTree}
-            showCutTree={showCutTree}
-          />
+                  <Suspense fallback={<div className="loading-panel viewer-loading-panel"><h2>Loading 2D net view</h2><p className="caption">Preparing projected net renderer...</p></div>}>
+                    <NetView2D
+                      polyhedron={polyhedron!}
+                      keepTree={keepTree!}
+                      cutTree={cutTree!}
+                      facePoses={netFacePoses!}
+                      coins={coins!}
+                      themeMode={themeMode}
+                      exportFileName={`${exportStem}-2d-net.svg`}
+                      renderMode={renderMode}
+                      showEdges={showEdges}
+                      showKeepTree={showKeepTree}
+                      showCutTree={showCutTree}
+                    />
+                  </Suspense>
+                </>
+              )
+            : (
+                <div className="loading-panel viewer-loading-panel">
+                  <h2>{polyhedronLoadError ? 'Load failed' : 'Loading polyhedron viewer'}</h2>
+                  <p className="caption">
+                    {polyhedronLoadError
+                      ? `Could not load ${polyhedronEntry.name}: ${polyhedronLoadError}`
+                      : `Preparing geometry for ${polyhedronEntry.name}...`}
+                  </p>
+                </div>
+              )}
         </section>
       </main>
 
