@@ -13,6 +13,12 @@ interface FaceSphereData {
   sphericalRadius: number
 }
 
+export interface MidsphereFit {
+  center: Vector3
+  radius: number
+  maxResidual: number
+}
+
 export interface InversiveDistancePairAnalysis {
   faceIndices: [number, number]
   spherical: number
@@ -46,13 +52,7 @@ export function analyzeInversiveDistances(
   keepTree: KeepTree,
   netFacePoses: Matrix4[],
 ): InversiveDistanceAnalysis {
-  const tangencyPoints = polyhedron.edges.map((edge) => {
-    const face = polyhedron.faces[edge.faceIndices[0]]
-    const edgeStart = polyhedron.vertices[edge.vertexIndices[0]]
-    const edgeEnd = polyhedron.vertices[edge.vertexIndices[1]]
-    return projectPointToEdgeLine(face.incenter, edgeStart, edgeEnd)
-  })
-  const midsphere = fitSphereToPoints(tangencyPoints)
+  const midsphere = computeMidsphereFit(polyhedron)
 
   if (!midsphere) {
     return {
@@ -198,7 +198,18 @@ function projectPointToEdgeLine(point: Vector3, edgeStart: Vector3, edgeEnd: Vec
   return edgeStart.clone().add(direction.multiplyScalar(t))
 }
 
-function fitSphereToPoints(points: Vector3[]) {
+export function computeMidsphereFit(polyhedron: DerivedPolyhedron): MidsphereFit | null {
+  const tangencyPoints = polyhedron.edges.map((edge) => {
+    const face = polyhedron.faces[edge.faceIndices[0]]
+    const edgeStart = polyhedron.vertices[edge.vertexIndices[0]]
+    const edgeEnd = polyhedron.vertices[edge.vertexIndices[1]]
+    return projectPointToEdgeLine(face.incenter, edgeStart, edgeEnd)
+  })
+
+  return fitSphereToPoints(tangencyPoints)
+}
+
+function fitSphereToPoints(points: Vector3[]): MidsphereFit | null {
   if (points.length < 4) {
     return null
   }

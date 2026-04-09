@@ -3,6 +3,7 @@ import { Vector3 } from 'three'
 import './App.css'
 import { AnalysisPanel } from './components/layout/AnalysisPanel'
 import { Sidebar } from './components/layout/Sidebar'
+import { computeMidsphereFit } from './domain/analysis/inversiveDistanceAnalysis'
 import { analyzeInversiveDistances } from './domain/analysis/inversiveDistanceAnalysis'
 import { analyzeKoebePolyhedron } from './domain/analysis/koebeAnalysis'
 import { buildCoins, getPolyhedronById, polyhedronRegistry } from './domain/polyhedra/registry'
@@ -84,7 +85,7 @@ function App() {
   const [showEdges, setShowEdges] = useState(true)
   const [showKeepTree, setShowKeepTree] = useState(true)
   const [showCutTree, setShowCutTree] = useState(true)
-  const [showUnitSphere, setShowUnitSphere] = useState(false)
+  const [showMidsphere, setShowMidsphere] = useState(false)
   const [targetT, setTargetT] = useState(0)
   const [currentT, setCurrentT] = useState(0)
   const [animationSpeed, setAnimationSpeed] = useState(5)
@@ -182,6 +183,10 @@ function App() {
   }, [facePoses, polyhedron])
   const koebeAnalysis = useMemo(
     () => (polyhedron ? analyzeKoebePolyhedron(polyhedron) : null),
+    [polyhedron],
+  )
+  const midsphereFit = useMemo(
+    () => (polyhedron ? computeMidsphereFit(polyhedron) : null),
     [polyhedron],
   )
   const inversiveDistanceAnalysis = useMemo(
@@ -328,8 +333,8 @@ function App() {
                   onShowKeepTreeChange={setShowKeepTree}
                   showCutTree={showCutTree}
                   onShowCutTreeChange={setShowCutTree}
-                  showUnitSphere={showUnitSphere}
-                  onShowUnitSphereChange={setShowUnitSphere}
+                  showMidsphere={showMidsphere}
+                  onShowMidsphereChange={setShowMidsphere}
                   animationSpeed={animationSpeed}
                   onAnimationSpeedChange={setAnimationSpeed}
                   themeMode={themeMode}
@@ -444,7 +449,9 @@ function App() {
                         showEdges={showEdges}
                         showKeepTree={showKeepTree}
                         showCutTree={showCutTree}
-                        showUnitSphere={showUnitSphere}
+                        showMidsphere={showMidsphere}
+                        midsphereCenter={midsphereFit?.center ?? null}
+                        midsphereRadius={midsphereFit?.radius ?? null}
                       />
                     </Suspense>
                   </div>

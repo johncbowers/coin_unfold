@@ -24,7 +24,9 @@ interface PolyhedronSceneProps {
   showEdges: boolean
   showKeepTree: boolean
   showCutTree: boolean
-  showUnitSphere: boolean
+  showMidsphere: boolean
+  midsphereCenter: Vector3 | null
+  midsphereRadius: number | null
 }
 
 interface FacePolygonProps {
@@ -189,7 +191,9 @@ function SceneContent({
   showEdges,
   showKeepTree,
   showCutTree,
-  showUnitSphere,
+  showMidsphere,
+  midsphereCenter,
+  midsphereRadius,
 }: PolyhedronSceneProps) {
   const staticSceneData = useMemo(() => {
     const edgeIndexByKey = new Map(
@@ -282,9 +286,9 @@ function SceneContent({
       <directionalLight position={[6, 8, 6]} intensity={2.2} />
       <directionalLight position={[-5, -2, -3]} intensity={0.8} color="#cbd5f5" />
 
-      {showUnitSphere && (
-        <mesh renderOrder={0} frustumCulled={false}>
-          <sphereGeometry args={[1, 64, 64]} />
+      {showMidsphere && midsphereCenter && midsphereRadius !== null && (
+        <mesh position={midsphereCenter} renderOrder={0} frustumCulled={false}>
+          <sphereGeometry args={[midsphereRadius, 64, 64]} />
           <meshStandardMaterial
             color={sphereColor}
             emissive={sphereEmissive}
