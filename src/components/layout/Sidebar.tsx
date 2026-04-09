@@ -27,6 +27,8 @@ interface SidebarProps {
   onShowKeepTreeChange: (value: boolean) => void
   showCutTree: boolean
   onShowCutTreeChange: (value: boolean) => void
+  showUnitSphere: boolean
+  onShowUnitSphereChange: (value: boolean) => void
   animationSpeed: number
   onAnimationSpeedChange: (value: number) => void
   themeMode: ThemeMode
@@ -69,6 +71,8 @@ export const Sidebar = memo(function Sidebar({
   onShowKeepTreeChange,
   showCutTree,
   onShowCutTreeChange,
+  showUnitSphere,
+  onShowUnitSphereChange,
   animationSpeed,
   onAnimationSpeedChange,
   themeMode,
@@ -166,6 +170,7 @@ export const Sidebar = memo(function Sidebar({
           <ToggleRow label="Show edges" checked={showEdges} onChange={onShowEdgesChange} />
           <ToggleRow label="Show keep tree" checked={showKeepTree} onChange={onShowKeepTreeChange} />
           <ToggleRow label="Show cut tree" checked={showCutTree} onChange={onShowCutTreeChange} />
+          <ToggleRow label="Show unit sphere" checked={showUnitSphere} onChange={onShowUnitSphereChange} />
         </div>
       </section>
 

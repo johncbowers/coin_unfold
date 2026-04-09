@@ -84,6 +84,7 @@ function App() {
   const [showEdges, setShowEdges] = useState(true)
   const [showKeepTree, setShowKeepTree] = useState(true)
   const [showCutTree, setShowCutTree] = useState(true)
+  const [showUnitSphere, setShowUnitSphere] = useState(false)
   const [targetT, setTargetT] = useState(0)
   const [currentT, setCurrentT] = useState(0)
   const [animationSpeed, setAnimationSpeed] = useState(5)
@@ -327,6 +328,8 @@ function App() {
                   onShowKeepTreeChange={setShowKeepTree}
                   showCutTree={showCutTree}
                   onShowCutTreeChange={setShowCutTree}
+                  showUnitSphere={showUnitSphere}
+                  onShowUnitSphereChange={setShowUnitSphere}
                   animationSpeed={animationSpeed}
                   onAnimationSpeedChange={setAnimationSpeed}
                   themeMode={themeMode}
@@ -441,6 +444,7 @@ function App() {
                         showEdges={showEdges}
                         showKeepTree={showKeepTree}
                         showCutTree={showCutTree}
+                        showUnitSphere={showUnitSphere}
                       />
                     </Suspense>
                   </div>

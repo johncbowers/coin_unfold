@@ -24,6 +24,7 @@ interface PolyhedronSceneProps {
   showEdges: boolean
   showKeepTree: boolean
   showCutTree: boolean
+  showUnitSphere: boolean
 }
 
 interface FacePolygonProps {
@@ -188,6 +189,7 @@ function SceneContent({
   showEdges,
   showKeepTree,
   showCutTree,
+  showUnitSphere,
 }: PolyhedronSceneProps) {
   const staticSceneData = useMemo(() => {
     const edgeIndexByKey = new Map(
@@ -270,6 +272,8 @@ function SceneContent({
   const sceneBackground = themeMode === 'dark' ? '#0f172a' : '#f8fafc'
   const gridMajor = themeMode === 'dark' ? '#334155' : '#cbd5e1'
   const gridMinor = themeMode === 'dark' ? '#1e293b' : '#e2e8f0'
+  const sphereColor = themeMode === 'dark' ? '#93c5fd' : '#2563eb'
+  const sphereEmissive = themeMode === 'dark' ? '#1d4ed8' : '#93c5fd'
 
   return (
     <>
@@ -277,6 +281,23 @@ function SceneContent({
       <ambientLight intensity={0.8} />
       <directionalLight position={[6, 8, 6]} intensity={2.2} />
       <directionalLight position={[-5, -2, -3]} intensity={0.8} color="#cbd5f5" />
+
+      {showUnitSphere && (
+        <mesh renderOrder={0} frustumCulled={false}>
+          <sphereGeometry args={[1, 64, 64]} />
+          <meshStandardMaterial
+            color={sphereColor}
+            emissive={sphereEmissive}
+            emissiveIntensity={0.08}
+            transparent
+            opacity={0.18}
+            depthWrite={false}
+            side={DoubleSide}
+            metalness={0.02}
+            roughness={0.3}
+          />
+        </mesh>
+      )}
 
       {showFaceMeshes &&
         staticSceneData.facePolygons.map((points, faceIndex) => (
