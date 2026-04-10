@@ -66,6 +66,7 @@ function getInitialUrlSelection(): UrlSelectionState {
   const validMethod: TreeMethod = requestedMethod === 'bfs'
     || requestedMethod === 'dfs'
     || requestedMethod === 'orange-peel'
+    || requestedMethod === 'tangency-point-geodesic'
     ? requestedMethod
     : DEFAULT_URL_SELECTION.method
 

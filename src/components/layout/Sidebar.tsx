@@ -140,6 +140,7 @@ export const Sidebar = memo(function Sidebar({
             <option value="bfs">Breadth-first search</option>
             <option value="dfs">Depth-first search</option>
             <option value="orange-peel">Orange Peel</option>
+            <option value="tangency-point-geodesic">Tangency-Point Geodesic Unfolding</option>
           </select>
         </label>
         <p className="caption">
@@ -148,6 +149,11 @@ export const Sidebar = memo(function Sidebar({
         {method === 'orange-peel' && (
           <p className="caption">
             Orange Peel follows a guided walk on the dual graph, preferring same-depth neighbors from the current face. The tree overlay shows tree edges, not walk order.
+          </p>
+        )}
+        {method === 'tangency-point-geodesic' && (
+          <p className="caption">
+            Tangency-Point Geodesic Unfolding rotates the chosen root coin to the north pole, assigns each dual edge weight $1-z$ using its tangency point on the midsphere, and keeps the minimum spanning tree.
           </p>
         )}
       </section>

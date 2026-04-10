@@ -1,10 +1,17 @@
-import { edgeKey, facePairKey } from '../geometry/polyhedronMath'
+import { Quaternion, Vector3 } from 'three'
+import { computeMidsphereFit } from '../analysis/inversiveDistanceAnalysis'
+import { clampUnit, edgeKey, facePairKey } from '../geometry/polyhedronMath'
 import type { CutTree, DerivedPolyhedron, KeepTree, TreeMethod } from '../../types/polyhedron'
 
 interface SearchEntry {
   parent: number | null
   face: number
   depth: number
+}
+
+interface WeightedDualEdge {
+  dualEdgeIndex: number
+  weight: number
 }
 
 export function buildKeepTree(
@@ -14,6 +21,10 @@ export function buildKeepTree(
 ): KeepTree {
   if (method === 'orange-peel') {
     return buildOrangePeelTree(polyhedron, rootFaceIndex)
+  }
+
+  if (method === 'tangency-point-geodesic') {
+    return buildMidsphereMinimumSpanningTree(polyhedron, rootFaceIndex)
   }
 
   const parentByFace: Array<number | null> = polyhedron.faces.map(() => null)
@@ -102,6 +113,189 @@ function buildOrangePeelTree(
     method: 'orange-peel',
     usedFallback: false,
   }
+}
+
+function buildMidsphereMinimumSpanningTree(
+  polyhedron: DerivedPolyhedron,
+  rootFaceIndex: number,
+): KeepTree {
+  const weightedDualEdges = buildMidsphereWeightedDualEdges(polyhedron, rootFaceIndex)
+
+  if (!weightedDualEdges) {
+    const fallbackTree = buildKeepTree(polyhedron, 'bfs', rootFaceIndex)
+
+    return {
+      ...fallbackTree,
+      method: 'tangency-point-geodesic',
+      usedFallback: true,
+    }
+  }
+
+  const selectedDualEdgeIndices = selectMinimumSpanningDualEdges(polyhedron, weightedDualEdges)
+  const adjacency = polyhedron.faces.map(() => [] as number[])
+
+  for (const dualEdgeIndex of selectedDualEdgeIndices) {
+    const [faceA, faceB] = polyhedron.dualEdges[dualEdgeIndex].faceIndices
+    adjacency[faceA].push(faceB)
+    adjacency[faceB].push(faceA)
+  }
+
+  const parentByFace: Array<number | null> = polyhedron.faces.map(() => null)
+  const depthByFace: Array<number | null> = polyhedron.faces.map(() => null)
+  const traversalOrder: number[] = []
+  const marked = new Set<number>()
+  const queue: SearchEntry[] = [{ parent: null, face: rootFaceIndex, depth: 0 }]
+
+  while (queue.length > 0) {
+    const { parent, face, depth } = queue.shift()!
+
+    if (marked.has(face)) {
+      continue
+    }
+
+    marked.add(face)
+    parentByFace[face] = parent
+    depthByFace[face] = depth
+    traversalOrder.push(face)
+
+    const neighbors = [...adjacency[face]].sort((left, right) => left - right)
+
+    for (const neighbor of neighbors) {
+      queue.push({ parent: face, face: neighbor, depth: depth + 1 })
+    }
+  }
+
+  return {
+    rootFaceIndex,
+    parentByFace,
+    depthByFace,
+    dualEdgeIndices: selectedDualEdgeIndices,
+    traversalOrder,
+    method: 'tangency-point-geodesic',
+    usedFallback: false,
+  }
+}
+
+function buildMidsphereWeightedDualEdges(
+  polyhedron: DerivedPolyhedron,
+  rootFaceIndex: number,
+): WeightedDualEdge[] | null {
+  const midsphere = computeMidsphereFit(polyhedron)
+
+  if (!midsphere || midsphere.radius < 1e-8) {
+    return null
+  }
+
+  const rootPole = computeFacePole(polyhedron, rootFaceIndex, midsphere.center)
+  const northPole = new Vector3(0, 0, 1)
+  const rotation = new Quaternion().setFromUnitVectors(rootPole, northPole)
+
+  return polyhedron.dualEdges.map((dualEdge) => {
+    const tangencyPoint = computeSharedTangencyPoint(polyhedron, dualEdge.primalEdgeIndex)
+    const rotatedPoint = tangencyPoint
+      .sub(midsphere.center)
+      .normalize()
+      .applyQuaternion(rotation)
+
+    return {
+      dualEdgeIndex: dualEdge.index,
+      weight: 1 - clampUnit(rotatedPoint.z),
+    }
+  })
+}
+
+function computeFacePole(
+  polyhedron: DerivedPolyhedron,
+  faceIndex: number,
+  midsphereCenter: Vector3,
+) {
+  const face = polyhedron.faces[faceIndex]
+  const signedDistance = face.normal.dot(face.incenter.clone().sub(midsphereCenter))
+
+  return (signedDistance >= 0 ? face.normal.clone() : face.normal.clone().negate()).normalize()
+}
+
+function computeSharedTangencyPoint(polyhedron: DerivedPolyhedron, edgeIndex: number) {
+  const edge = polyhedron.edges[edgeIndex]
+  const edgeStart = polyhedron.vertices[edge.vertexIndices[0]]
+  const edgeEnd = polyhedron.vertices[edge.vertexIndices[1]]
+  const [faceAIndex, faceBIndex] = edge.faceIndices
+  const tangencyA = projectPointToEdgeLine(polyhedron.faces[faceAIndex].incenter, edgeStart, edgeEnd)
+  const tangencyB = projectPointToEdgeLine(polyhedron.faces[faceBIndex].incenter, edgeStart, edgeEnd)
+
+  return tangencyA.add(tangencyB).multiplyScalar(0.5)
+}
+
+function projectPointToEdgeLine(point: Vector3, edgeStart: Vector3, edgeEnd: Vector3) {
+  const direction = edgeEnd.clone().sub(edgeStart)
+  const lengthSq = direction.lengthSq()
+
+  if (lengthSq < 1e-8) {
+    return edgeStart.clone()
+  }
+
+  const t = point.clone().sub(edgeStart).dot(direction) / lengthSq
+  return edgeStart.clone().add(direction.multiplyScalar(t))
+}
+
+function selectMinimumSpanningDualEdges(
+  polyhedron: DerivedPolyhedron,
+  weightedDualEdges: WeightedDualEdge[],
+) {
+  const disjointSetParent = polyhedron.faces.map((_, faceIndex) => faceIndex)
+  const disjointSetRank = polyhedron.faces.map(() => 0)
+  const selectedDualEdgeIndices: number[] = []
+  const sortedEdges = [...weightedDualEdges].sort((left, right) => {
+    if (left.weight !== right.weight) {
+      return left.weight - right.weight
+    }
+
+    return left.dualEdgeIndex - right.dualEdgeIndex
+  })
+
+  const findRoot = (faceIndex: number): number => {
+    if (disjointSetParent[faceIndex] !== faceIndex) {
+      disjointSetParent[faceIndex] = findRoot(disjointSetParent[faceIndex])
+    }
+
+    return disjointSetParent[faceIndex]
+  }
+
+  const mergeRoots = (leftFaceIndex: number, rightFaceIndex: number) => {
+    const leftRoot = findRoot(leftFaceIndex)
+    const rightRoot = findRoot(rightFaceIndex)
+
+    if (leftRoot === rightRoot) {
+      return false
+    }
+
+    if (disjointSetRank[leftRoot] < disjointSetRank[rightRoot]) {
+      disjointSetParent[leftRoot] = rightRoot
+    } else if (disjointSetRank[leftRoot] > disjointSetRank[rightRoot]) {
+      disjointSetParent[rightRoot] = leftRoot
+    } else {
+      disjointSetParent[rightRoot] = leftRoot
+      disjointSetRank[leftRoot] += 1
+    }
+
+    return true
+  }
+
+  for (const weightedEdge of sortedEdges) {
+    const [faceAIndex, faceBIndex] = polyhedron.dualEdges[weightedEdge.dualEdgeIndex].faceIndices
+
+    if (!mergeRoots(faceAIndex, faceBIndex)) {
+      continue
+    }
+
+    selectedDualEdgeIndices.push(weightedEdge.dualEdgeIndex)
+
+    if (selectedDualEdgeIndices.length === polyhedron.faces.length - 1) {
+      break
+    }
+  }
+
+  return selectedDualEdgeIndices
 }
 
 function buildOrangePeelWalk(

@@ -1,6 +1,6 @@
 import type { Matrix4, Vector3 } from 'three'
 
-export type TreeMethod = 'bfs' | 'dfs' | 'orange-peel'
+export type TreeMethod = 'bfs' | 'dfs' | 'orange-peel' | 'tangency-point-geodesic'
 export type RenderMode = 'faces' | 'faces+coins' | 'coins-only'
 
 export interface RawPolyhedron {
